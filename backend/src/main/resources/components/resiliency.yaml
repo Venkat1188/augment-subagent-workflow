@@ -1,0 +1,19 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: payee-resiliency
+spec:
+  policies:
+    retries:
+      payee-retry:
+        policy: exponential
+        maxRetries: 3
+        maxInterval: 10s
+    timeouts:
+      payee-timeout: 5s
+  targets:
+    components:
+      payee-statestore:
+        outbound:
+          retry: payee-retry
+          timeout: payee-timeout

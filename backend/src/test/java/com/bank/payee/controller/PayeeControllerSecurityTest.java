@@ -13,10 +13,15 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
+import reactor.core.publisher.Mono;
+
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -56,7 +61,7 @@ class PayeeControllerSecurityTest {
     @WithMockUser
     @DisplayName("GET /api/payees should return 200 when user is authenticated")
     void test_getPayees_authenticated_returns200() throws Exception {
-        when(payeeService.getPayees()).thenReturn(Collections.emptyList());
+        when(payeeService.getPayees()).thenReturn(Mono.just(Collections.emptyList()));
 
         mockMvc.perform(get("/api/payees"))
                 .andExpect(status().isOk());
@@ -81,9 +86,14 @@ class PayeeControllerSecurityTest {
     @WithMockUser
     @DisplayName("DELETE /api/payees/{id} should return 204 when authenticated and payee exists")
     void test_deletePayee_authenticated_existingId_returns204() throws Exception {
-        when(payeeService.deletePayee("some-uuid")).thenReturn(true);
+        when(payeeService.deletePayee("some-uuid")).thenReturn(Mono.just(true));
 
-        mockMvc.perform(delete("/api/payees/some-uuid"))
+        // Mono<ResponseEntity<Void>> is async — must use asyncDispatch to get the real status code
+        MvcResult mvcResult = mockMvc.perform(delete("/api/payees/some-uuid"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isNoContent());
     }
 }

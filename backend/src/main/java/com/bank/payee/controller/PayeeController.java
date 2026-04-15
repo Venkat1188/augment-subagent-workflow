@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -67,52 +68,51 @@ public class PayeeController {
 
     /**
      * Step 2 – Verify the OTP and finalise adding the payee.
+     * Returns {@code Mono<ResponseEntity<>>} because {@link PayeeService#addPayee} is reactive.
      *
      * @param request session ID and OTP entered by the user
      * @return verification outcome with appropriate HTTP status
      */
     @PostMapping("/verify-otp")
-    public ResponseEntity<VerifyOtpResponse> verifyOtp(
+    public Mono<ResponseEntity<VerifyOtpResponse>> verifyOtp(
             @Valid @RequestBody VerifyOtpRequest request) {
 
         VerifyResult result = mfaService.verifyOtp(request.getSessionId(), request.getOtpCode());
 
         return switch (result.getStatus()) {
-            case SUCCESS -> {
-                Payee savedPayee = payeeService.addPayee(result.getPayee());
-                yield ResponseEntity.ok(
-                        VerifyOtpResponse.success("Payee added successfully.", savedPayee));
-            }
-            case WRONG_OTP -> ResponseEntity.badRequest()
-                    .body(VerifyOtpResponse.failure(result.getMessage(), result.getRemainingAttempts()));
-            case LOCKED -> ResponseEntity.status(HttpStatus.LOCKED)
-                    .body(VerifyOtpResponse.locked(result.getMessage(), result.getLockedUntil()));
-            case NOT_FOUND, EXPIRED -> ResponseEntity.badRequest()
-                    .body(VerifyOtpResponse.error(result.getMessage()));
+            case SUCCESS -> payeeService.addPayee(result.getPayee())
+                    .map(saved -> ResponseEntity.ok(
+                            VerifyOtpResponse.success("Payee added successfully.", saved)));
+            case WRONG_OTP -> Mono.just(ResponseEntity.badRequest()
+                    .body(VerifyOtpResponse.failure(result.getMessage(), result.getRemainingAttempts())));
+            case LOCKED -> Mono.just(ResponseEntity.status(HttpStatus.LOCKED)
+                    .body(VerifyOtpResponse.locked(result.getMessage(), result.getLockedUntil())));
+            case NOT_FOUND, EXPIRED -> Mono.just(ResponseEntity.badRequest()
+                    .body(VerifyOtpResponse.error(result.getMessage())));
         };
     }
 
     /**
-     * GET /api/payees – returns all confirmed payees.
+     * GET /api/payees – returns all confirmed payees from the Dapr state store.
      *
-     * @return 200 OK with the list of payees
+     * @return {@code Mono<ResponseEntity<List<Payee>>>} — 200 OK
      */
     @GetMapping
-    public ResponseEntity<List<Payee>> getPayees() {
-        return ResponseEntity.ok(payeeService.getPayees());
+    public Mono<ResponseEntity<List<Payee>>> getPayees() {
+        return payeeService.getPayees().map(ResponseEntity::ok);
     }
 
     /**
-     * DELETE /api/payees/{id} – removes a payee by its UUID.
+     * DELETE /api/payees/{id} – removes a payee from the Dapr state store.
      *
      * @param id the UUID of the payee to delete
      * @return 204 No Content on success, 404 Not Found if the payee does not exist
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deletePayee(@PathVariable String id) {
-        boolean removed = payeeService.deletePayee(id);
-        return removed
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.notFound().build();
+    public Mono<ResponseEntity<Void>> deletePayee(@PathVariable String id) {
+        return payeeService.deletePayee(id)
+                .map(removed -> removed
+                        ? ResponseEntity.<Void>noContent().build()
+                        : ResponseEntity.<Void>notFound().build());
     }
 }

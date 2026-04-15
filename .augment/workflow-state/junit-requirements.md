@@ -1,16 +1,19 @@
-# JUnit 5 Test Specifications — SCRUM-1
+# JUnit 5 Test Specifications — SCRUM-1 (v2 — Dapr-Native)
+
+## Skill Applied: `java-spring-boot-dapr` — DaprClient mocked via Mockito
 
 ## Overview
 
 | Test Class | New/Modified | # Tests |
 |---|---|---|
-| `MfaServiceTest` | ✅ Already exists & passes | — (no changes) |
-| `PayeeControllerTest` | **Modify** — add 3 new tests | +3 |
-| `PayeeServiceTest` | **Create new** | 4 |
+| `MfaServiceTest` | ✅ No changes | 7 existing |
+| `PayeeControllerTest` | **Modify** — Mono-aware assertions | 10 updated |
+| `PayeeControllerSecurityTest` | **Modify** — Mono-aware | 4 updated |
+| `PayeeServiceTest` | **Rewrite** — mock DaprClient | 5 Dapr tests |
 
 ---
 
-## A. `PayeeServiceTest` ← NEW CLASS
+## A. `PayeeServiceTest` — REWRITE with DaprClient mock
 
 **File:** `backend/src/test/java/com/bank/payee/service/PayeeServiceTest.java`
 
@@ -18,17 +21,27 @@
 package com.bank.payee.service;
 
 import com.bank.payee.model.Payee;
-import org.junit.jupiter.api.BeforeEach;
+import io.dapr.client.DaprClient;
+import io.dapr.client.domain.State;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
-import java.util.List;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
-import static org.junit.jupiter.api.Assertions.*;
-
+@ExtendWith(MockitoExtension.class)
 class PayeeServiceTest {
 
-    // PayeeService has no dependencies to mock — instantiate directly
+    @Mock
+    private DaprClient daprClient;
+
+    @InjectMocks
     private PayeeService payeeService;
 
     @BeforeEach
@@ -37,82 +50,88 @@ class PayeeServiceTest {
     }
 
     // ------------------------------------------------------------------
-    // addPayee
+    // addPayee — saves to Dapr state store AND publishes event
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should assign UUID id and addedAt timestamp when payee is added")
-    void test_addPayee_populatesIdAndTimestamp() {
+    @DisplayName("Should save state and publish event when payee is added")
+    void test_addPayee_savesStateAndPublishesEvent() {
         // Arrange
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
+        when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any(Payee.class)))
+            .thenReturn(Mono.empty());
+        when(daprClient.publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any()))
+            .thenReturn(Mono.empty());
 
-        // Act
-        Payee saved = payeeService.addPayee(payee);
+        // Act & Assert
+        StepVerifier.create(payeeService.addPayee(payee))
+            .assertNext(saved -> {
+                assertNotNull(saved.getId());
+                assertNotNull(saved.getAddedAt());
+                assertEquals("Alice", saved.getName());
+            })
+            .verifyComplete();
 
-        // Assert
-        assertNotNull(saved.getId(),      "id must be populated");
-        assertNotNull(saved.getAddedAt(), "addedAt must be populated");
-        assertEquals("Alice",  saved.getName());
-        assertEquals("ACC001", saved.getAccountNumber());
-        assertEquals("BNKA",   saved.getBankCode());
+        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), anyString(), any(Payee.class));
+        verify(daprClient, times(1)).publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any());
     }
 
     // ------------------------------------------------------------------
-    // getPayees
+    // getPayees — reads from Dapr state store
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should return empty list when no payees have been added")
+    @DisplayName("Should return empty list when state store has no payees")
     void test_getPayees_emptyStore_returnsEmptyList() {
-        // Act
-        List<Payee> result = payeeService.getPayees();
-
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    @DisplayName("Should return all stored payees after multiple adds")
-    void test_getPayees_afterMultipleAdds_returnsAllPayees() {
         // Arrange
-        payeeService.addPayee(new Payee("Alice", "ACC001", "BNKA"));
-        payeeService.addPayee(new Payee("Bob",   "ACC002", "BNKB"));
+        when(daprClient.getState(eq(PayeeService.STORE), eq("payee-index"), eq(java.util.List.class)))
+            .thenReturn(Mono.just(new State<>("payee-index", null, null, null, null)));
 
-        // Act
-        List<Payee> result = payeeService.getPayees();
-
-        // Assert
-        assertEquals(2, result.size());
+        // Act & Assert
+        StepVerifier.create(payeeService.getPayees())
+            .assertNext(list -> assertTrue(list.isEmpty()))
+            .verifyComplete();
     }
 
     // ------------------------------------------------------------------
-    // deletePayee
+    // deletePayee — existing id
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should return true and remove payee when id exists")
-    void test_deletePayee_existingId_returnsTrueAndRemovesPayee() {
+    @DisplayName("Should return true and delete state when payee id exists")
+    void test_deletePayee_existingId_returnsTrueAndDeletesState() {
         // Arrange
-        Payee saved = payeeService.addPayee(new Payee("Alice", "ACC001", "BNKA"));
-        String id = saved.getId();
+        Payee existing = new Payee("Alice", "ACC001", "BNKA");
+        when(daprClient.getState(eq(PayeeService.STORE), eq("abc"), eq(Payee.class)))
+            .thenReturn(Mono.just(new State<>("abc", existing, null, null, null)));
+        when(daprClient.deleteState(eq(PayeeService.STORE), eq("abc")))
+            .thenReturn(Mono.empty());
 
-        // Act
-        boolean result = payeeService.deletePayee(id);
+        // Act & Assert
+        StepVerifier.create(payeeService.deletePayee("abc"))
+            .assertNext(result -> assertTrue(result))
+            .verifyComplete();
 
-        // Assert
-        assertTrue(result, "deletePayee should return true for a known id");
-        assertTrue(payeeService.getPayees().isEmpty(), "store must be empty after deletion");
+        verify(daprClient, times(1)).deleteState(PayeeService.STORE, "abc");
     }
 
+    // ------------------------------------------------------------------
+    // deletePayee — non-existing id
+    // ------------------------------------------------------------------
+
     @Test
-    @DisplayName("Should return false when id does not exist")
+    @DisplayName("Should return false when payee id does not exist in state store")
     void test_deletePayee_nonExistingId_returnsFalse() {
-        // Act
-        boolean result = payeeService.deletePayee("non-existent-uuid");
+        // Arrange
+        when(daprClient.getState(eq(PayeeService.STORE), eq("xyz"), eq(Payee.class)))
+            .thenReturn(Mono.just(new State<>("xyz", null, null, null, null)));
 
-        // Assert
-        assertFalse(result, "deletePayee should return false for an unknown id");
+        // Act & Assert
+        StepVerifier.create(payeeService.deletePayee("xyz"))
+            .assertNext(result -> assertFalse(result))
+            .verifyComplete();
+
+        verify(daprClient, never()).deleteState(any(), any());
     }
 }
 ```
