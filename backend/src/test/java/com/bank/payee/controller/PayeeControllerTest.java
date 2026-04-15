@@ -194,6 +194,21 @@ class PayeeControllerTest {
         assertEquals(2, response.getBody().size());
     }
 
+    @Test
+    @DisplayName("Should return 200 with empty array when no payees exist")
+    void test_getPayees_emptyStore_returns200WithEmptyList() {
+        // Arrange
+        when(payeeService.getPayees()).thenReturn(Collections.emptyList());
+
+        // Act
+        ResponseEntity<List<Payee>> response = payeeController.getPayees();
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().isEmpty());
+    }
+
     // -------------------------------------------------------------------------
     // DELETE /api/payees/{id}
     // -------------------------------------------------------------------------
