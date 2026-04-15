@@ -14,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * REST controller for MFA-protected payee management.
  *
@@ -88,5 +90,29 @@ public class PayeeController {
             case NOT_FOUND, EXPIRED -> ResponseEntity.badRequest()
                     .body(VerifyOtpResponse.error(result.getMessage()));
         };
+    }
+
+    /**
+     * GET /api/payees – returns all confirmed payees.
+     *
+     * @return 200 OK with the list of payees
+     */
+    @GetMapping
+    public ResponseEntity<List<Payee>> getPayees() {
+        return ResponseEntity.ok(payeeService.getPayees());
+    }
+
+    /**
+     * DELETE /api/payees/{id} – removes a payee by its UUID.
+     *
+     * @param id the UUID of the payee to delete
+     * @return 204 No Content on success, 404 Not Found if the payee does not exist
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePayee(@PathVariable String id) {
+        boolean removed = payeeService.deletePayee(id);
+        return removed
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.notFound().build();
     }
 }

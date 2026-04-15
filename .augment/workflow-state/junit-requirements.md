@@ -1,137 +1,235 @@
-# JUnit 5 Test Specifications – SCRUM-1
+# JUnit 5 Test Specifications — SCRUM-1
 
-## `MfaServiceTest`
+## Overview
+
+| Test Class | New/Modified | # Tests |
+|---|---|---|
+| `MfaServiceTest` | ✅ Already exists & passes | — (no changes) |
+| `PayeeControllerTest` | **Modify** — add 3 new tests | +3 |
+| `PayeeServiceTest` | **Create new** | 4 |
+
+---
+
+## A. `PayeeServiceTest` ← NEW CLASS
+
+**File:** `backend/src/test/java/com/bank/payee/service/PayeeServiceTest.java`
 
 ```java
-@ExtendWith(MockitoExtension.class)
-class MfaServiceTest {
+package com.bank.payee.service;
 
-    @Mock private OtpService otpService;
-    @InjectMocks private MfaService mfaService;
+import com.bank.payee.model.Payee;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
-    @Test @DisplayName("Should create session and send SMS OTP when method is SMS")
-    void test_initiateMfa_sms_createsSessionAndSendsSmsOtp() {
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class PayeeServiceTest {
+
+    // PayeeService has no dependencies to mock — instantiate directly
+    private PayeeService payeeService;
+
+    @BeforeEach
+    void setUp() {
+        payeeService = new PayeeService();
+    }
+
+    // ------------------------------------------------------------------
+    // addPayee
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should assign UUID id and addedAt timestamp when payee is added")
+    void test_addPayee_populatesIdAndTimestamp() {
         // Arrange
-        when(otpService.generateOtp()).thenReturn("123456");
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
+
         // Act
-        MfaSession session = mfaService.initiateMfa(payee, MfaMethod.SMS);
+        Payee saved = payeeService.addPayee(payee);
+
         // Assert
-        assertNotNull(session.getSessionId());
-        assertEquals("123456", session.getOtpCode());
-        verify(otpService).sendSmsOtp("123456");
-        verify(otpService, never()).sendTotpCode(any());
+        assertNotNull(saved.getId(),      "id must be populated");
+        assertNotNull(saved.getAddedAt(), "addedAt must be populated");
+        assertEquals("Alice",  saved.getName());
+        assertEquals("ACC001", saved.getAccountNumber());
+        assertEquals("BNKA",   saved.getBankCode());
     }
 
-    @Test @DisplayName("Should create session and send TOTP code when method is TOTP")
-    void test_initiateMfa_totp_createsSessionAndSendsTotpCode() {
-        when(otpService.generateOtp()).thenReturn("654321");
-        Payee payee = new Payee("Bob", "ACC002", "BNKB");
-        MfaSession session = mfaService.initiateMfa(payee, MfaMethod.TOTP);
-        assertNotNull(session.getSessionId());
-        verify(otpService).sendTotpCode("654321");
-        verify(otpService, never()).sendSmsOtp(any());
+    // ------------------------------------------------------------------
+    // getPayees
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should return empty list when no payees have been added")
+    void test_getPayees_emptyStore_returnsEmptyList() {
+        // Act
+        List<Payee> result = payeeService.getPayees();
+
+        // Assert
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
     }
 
-    @Test @DisplayName("Should return SUCCESS when OTP matches")
-    void test_verifyOtp_correctOtp_returnsSuccess() {
-        when(otpService.generateOtp()).thenReturn("111111");
-        MfaSession session = mfaService.initiateMfa(new Payee("C","A","B"), MfaMethod.SMS);
-        VerifyResult result = mfaService.verifyOtp(session.getSessionId(), "111111");
-        assertEquals(VerifyResult.Status.SUCCESS, result.getStatus());
-        assertNotNull(result.getPayee());
+    @Test
+    @DisplayName("Should return all stored payees after multiple adds")
+    void test_getPayees_afterMultipleAdds_returnsAllPayees() {
+        // Arrange
+        payeeService.addPayee(new Payee("Alice", "ACC001", "BNKA"));
+        payeeService.addPayee(new Payee("Bob",   "ACC002", "BNKB"));
+
+        // Act
+        List<Payee> result = payeeService.getPayees();
+
+        // Assert
+        assertEquals(2, result.size());
     }
 
-    @Test @DisplayName("Should return WRONG_OTP with decremented attempts on bad OTP")
-    void test_verifyOtp_wrongOtp_decrementsRemainingAttempts() {
-        when(otpService.generateOtp()).thenReturn("999999");
-        MfaSession session = mfaService.initiateMfa(new Payee("D","A","B"), MfaMethod.SMS);
-        VerifyResult result = mfaService.verifyOtp(session.getSessionId(), "000000");
-        assertEquals(VerifyResult.Status.WRONG_OTP, result.getStatus());
-        assertEquals(2, result.getRemainingAttempts());
+    // ------------------------------------------------------------------
+    // deletePayee
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should return true and remove payee when id exists")
+    void test_deletePayee_existingId_returnsTrueAndRemovesPayee() {
+        // Arrange
+        Payee saved = payeeService.addPayee(new Payee("Alice", "ACC001", "BNKA"));
+        String id = saved.getId();
+
+        // Act
+        boolean result = payeeService.deletePayee(id);
+
+        // Assert
+        assertTrue(result, "deletePayee should return true for a known id");
+        assertTrue(payeeService.getPayees().isEmpty(), "store must be empty after deletion");
     }
 
-    @Test @DisplayName("Should lock session after MAX_ATTEMPTS failed attempts")
-    void test_verifyOtp_maxFailedAttempts_locksSession() {
-        when(otpService.generateOtp()).thenReturn("777777");
-        MfaSession session = mfaService.initiateMfa(new Payee("E","A","B"), MfaMethod.SMS);
-        String sid = session.getSessionId();
-        mfaService.verifyOtp(sid, "000001");
-        mfaService.verifyOtp(sid, "000002");
-        VerifyResult result = mfaService.verifyOtp(sid, "000003");
-        assertEquals(VerifyResult.Status.LOCKED, result.getStatus());
-        assertNotNull(result.getLockedUntil());
-    }
+    @Test
+    @DisplayName("Should return false when id does not exist")
+    void test_deletePayee_nonExistingId_returnsFalse() {
+        // Act
+        boolean result = payeeService.deletePayee("non-existent-uuid");
 
-    @Test @DisplayName("Should return NOT_FOUND for unknown session")
-    void test_verifyOtp_unknownSession_returnsNotFound() {
-        VerifyResult result = mfaService.verifyOtp("no-such-id", "000000");
-        assertEquals(VerifyResult.Status.NOT_FOUND, result.getStatus());
+        // Assert
+        assertFalse(result, "deletePayee should return false for an unknown id");
     }
 }
 ```
 
-## `PayeeControllerTest`
+---
+
+## B. `PayeeControllerTest` — ADD 3 NEW TEST METHODS
+
+**File:** `backend/src/test/java/com/bank/payee/controller/PayeeControllerTest.java`
+
+Add the following imports (if not already present):
+```java
+import java.util.List;
+import static org.mockito.Mockito.when;
+```
+
+Append these three test methods inside the existing `PayeeControllerTest` class:
 
 ```java
-@ExtendWith(MockitoExtension.class)
-class PayeeControllerTest {
+    // -----------------------------------------------------------------------
+    // GET /api/payees
+    // -----------------------------------------------------------------------
 
-    @Mock private MfaService mfaService;
-    @Mock private PayeeService payeeService;
-    @InjectMocks private PayeeController payeeController;
-
-    @Test @DisplayName("Should return 200 with sessionId when initiate-mfa request is valid")
-    void test_initiateMfa_validRequest_returns200() {
+    @Test
+    @DisplayName("Should return 200 with list of payees when payees exist")
+    void test_getPayees_returnsAllPayees() {
         // Arrange
-        AddPayeeRequest req = new AddPayeeRequest("Alice","ACC001","BNKA", MfaMethod.SMS);
-        MfaSession mockSession = new MfaSession("sess-1", new Payee("Alice","ACC001","BNKA"),
-            MfaMethod.SMS, "123456", LocalDateTime.now().plusMinutes(10));
-        when(mfaService.initiateMfa(any(Payee.class), eq(MfaMethod.SMS))).thenReturn(mockSession);
+        Payee alice = new Payee("Alice", "ACC001", "BNKA");
+        Payee bob   = new Payee("Bob",   "ACC002", "BNKB");
+        when(payeeService.getPayees()).thenReturn(List.of(alice, bob));
+
         // Act
-        ResponseEntity<InitiateMfaResponse> response = payeeController.initiateMfa(req);
+        ResponseEntity<List<Payee>> response = payeeController.getPayees();
+
         // Assert
         assertEquals(200, response.getStatusCode().value());
         assertNotNull(response.getBody());
-        assertEquals("sess-1", response.getBody().getSessionId());
+        assertEquals(2, response.getBody().size());
+        verify(payeeService, times(1)).getPayees();
     }
 
-    @Test @DisplayName("Should return 200 with payee when OTP is correct")
-    void test_verifyOtp_correctOtp_returns200WithPayee() {
-        Payee payee = new Payee("Alice","ACC001","BNKA");
-        when(mfaService.verifyOtp("sess-1","123456")).thenReturn(VerifyResult.success(payee));
-        when(payeeService.addPayee(any())).thenReturn(payee);
-        VerifyOtpRequest req = new VerifyOtpRequest("sess-1","123456");
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req);
-        assertEquals(200, response.getStatusCode().value());
-        assertTrue(response.getBody().isSuccess());
+    // -----------------------------------------------------------------------
+    // DELETE /api/payees/{id} — found
+    // -----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should return 204 No Content when payee is successfully deleted")
+    void test_deletePayee_existingId_returns204() {
+        // Arrange
+        when(payeeService.deletePayee("payee-uuid-123")).thenReturn(true);
+
+        // Act
+        ResponseEntity<Void> response = payeeController.deletePayee("payee-uuid-123");
+
+        // Assert
+        assertEquals(204, response.getStatusCode().value());
+        assertNull(response.getBody());
+        verify(payeeService, times(1)).deletePayee("payee-uuid-123");
     }
 
-    @Test @DisplayName("Should return 400 when OTP is wrong")
-    void test_verifyOtp_wrongOtp_returns400() {
-        when(mfaService.verifyOtp("sess-1","000000")).thenReturn(VerifyResult.wrongOtp(2));
-        ResponseEntity<VerifyOtpResponse> response =
-            payeeController.verifyOtp(new VerifyOtpRequest("sess-1","000000"));
-        assertEquals(400, response.getStatusCode().value());
-        assertFalse(response.getBody().isSuccess());
-        assertEquals(2, response.getBody().getRemainingAttempts());
-    }
+    // -----------------------------------------------------------------------
+    // DELETE /api/payees/{id} — not found
+    // -----------------------------------------------------------------------
 
-    @Test @DisplayName("Should return 423 when session is locked")
-    void test_verifyOtp_lockedSession_returns423() {
-        when(mfaService.verifyOtp("sess-1","000000"))
-            .thenReturn(VerifyResult.locked(LocalDateTime.now().plusMinutes(5)));
-        ResponseEntity<VerifyOtpResponse> response =
-            payeeController.verifyOtp(new VerifyOtpRequest("sess-1","000000"));
-        assertEquals(423, response.getStatusCode().value());
-    }
+    @Test
+    @DisplayName("Should return 404 Not Found when payee id does not exist")
+    void test_deletePayee_nonExistingId_returns404() {
+        // Arrange
+        when(payeeService.deletePayee("unknown-id")).thenReturn(false);
 
-    @Test @DisplayName("Should return 400 when session is not found")
-    void test_verifyOtp_notFound_returns400() {
-        when(mfaService.verifyOtp("bad-id","000000")).thenReturn(VerifyResult.notFound());
-        ResponseEntity<VerifyOtpResponse> response =
-            payeeController.verifyOtp(new VerifyOtpRequest("bad-id","000000"));
-        assertEquals(400, response.getStatusCode().value());
+        // Act
+        ResponseEntity<Void> response = payeeController.deletePayee("unknown-id");
+
+        // Assert
+        assertEquals(404, response.getStatusCode().value());
+        verify(payeeService, times(1)).deletePayee("unknown-id");
     }
-}
 ```
+
+---
+
+## C. `MfaServiceTest` — No Changes Required
+
+The existing `MfaServiceTest` is complete and covers all 6 scenarios:
+
+| Test Method | Scenario |
+|---|---|
+| `test_initiateMfa_sms_createsSessionAndSendsSmsOtp` | SMS OTP dispatched |
+| `test_initiateMfa_totp_createsSessionAndSendsTotpCode` | TOTP code dispatched |
+| `test_verifyOtp_correctOtp_returnsSuccess` | OTP matches → SUCCESS |
+| `test_verifyOtp_wrongOtp_decrementsRemainingAttempts` | Wrong OTP → WRONG_OTP |
+| `test_verifyOtp_maxFailedAttempts_locksSession` | 3 failures → LOCKED |
+| `test_verifyOtp_alreadyLockedSession_returnsLocked` | Already locked → LOCKED |
+| `test_verifyOtp_unknownSession_returnsNotFound` | No session → NOT_FOUND |
+
+---
+
+## D. Mock & Assertion Reference
+
+### `PayeeServiceTest` — no mocks needed
+`PayeeService` uses an in-memory `ConcurrentHashMap` with no collaborators.
+Use a plain `new PayeeService()` instance, reset in `@BeforeEach`.
+
+### `PayeeControllerTest` — existing mocks sufficient
+
+| Mock | Used in new tests |
+|---|---|
+| `@Mock PayeeService payeeService` | `getPayees()`, `deletePayee(id)` |
+| `@Mock MfaService mfaService` | Not used in new tests |
+
+### Key assertions for new tests
+
+| Scenario | Assert |
+|---|---|
+| GET payees (list) | `assertEquals(200, ...)`, `assertEquals(2, body.size())` |
+| DELETE found | `assertEquals(204, ...)`, `assertNull(body)` |
+| DELETE not found | `assertEquals(404, ...)` |
+| addPayee | `assertNotNull(id)`, `assertNotNull(addedAt)` |
+| deletePayee found | `assertTrue(result)`, `assertTrue(getPayees().isEmpty())` |
+| deletePayee not found | `assertFalse(result)` |

@@ -19,6 +19,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -167,5 +170,58 @@ class PayeeControllerTest {
         // Assert
         assertEquals(400, response.getStatusCode().value());
         assertFalse(response.getBody().isSuccess());
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/payees
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should return 200 with list of all payees")
+    void test_getPayees_returnsAllPayees() {
+        // Arrange
+        Payee payee1 = new Payee("Alice", "ACC001", "BNKA");
+        Payee payee2 = new Payee("Bob", "ACC002", "BNKB");
+        List<Payee> payees = Arrays.asList(payee1, payee2);
+        when(payeeService.getPayees()).thenReturn(payees);
+
+        // Act
+        ResponseEntity<List<Payee>> response = payeeController.getPayees();
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        assertEquals(2, response.getBody().size());
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE /api/payees/{id}
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("Should return 204 No Content when payee exists and is deleted")
+    void test_deletePayee_existingId_returns204() {
+        // Arrange
+        when(payeeService.deletePayee("payee-id-1")).thenReturn(true);
+
+        // Act
+        ResponseEntity<Void> response = payeeController.deletePayee("payee-id-1");
+
+        // Assert
+        assertEquals(204, response.getStatusCode().value());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    @DisplayName("Should return 404 Not Found when payee does not exist")
+    void test_deletePayee_nonExistingId_returns404() {
+        // Arrange
+        when(payeeService.deletePayee("no-such-id")).thenReturn(false);
+
+        // Act
+        ResponseEntity<Void> response = payeeController.deletePayee("no-such-id");
+
+        // Assert
+        assertEquals(404, response.getStatusCode().value());
     }
 }

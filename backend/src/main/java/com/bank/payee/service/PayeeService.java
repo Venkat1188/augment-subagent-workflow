@@ -34,4 +34,14 @@ public class PayeeService {
     public List<Payee> getPayees() {
         return new ArrayList<>(payeeStore.values());
     }
+
+    /**
+     * Deletes a payee by its id.
+     *
+     * @param id the UUID of the payee to delete
+     * @return {@code true} if the payee existed and was removed; {@code false} otherwise
+     */
+    public boolean deletePayee(String id) {
+        return payeeStore.remove(id) != null;
+    }
 }
