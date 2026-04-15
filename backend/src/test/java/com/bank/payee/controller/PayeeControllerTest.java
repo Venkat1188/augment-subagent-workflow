@@ -63,7 +63,7 @@ class PayeeControllerTest {
         assertEquals(200, response.getStatusCode().value());
         assertNotNull(response.getBody());
         assertEquals("sess-001", response.getBody().getSessionId());
-        assertEquals("123456", response.getBody().getDemoOtp());
+        assertNull(response.getBody().getDemoOtp(), "OTP must NOT be returned in API response");
         assertEquals(MfaMethod.SMS, response.getBody().getMfaMethod());
     }
 

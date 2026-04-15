@@ -17,3 +17,7 @@ spec:
         outbound:
           retry: payee-retry
           timeout: payee-timeout
+      payee-pubsub:
+        outbound:
+          retry: payee-retry
+          timeout: payee-timeout

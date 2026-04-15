@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,12 +33,17 @@ class PayeeServiceTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should save state and publish event when payee is added")
+    @DisplayName("Should save state, update index, and publish event when payee is added")
+    @SuppressWarnings("unchecked")
     void test_addPayee_savesStateAndPublishesEvent() {
         // Arrange
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
-        when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any(Payee.class)))
+        // saveState called twice: once for payee by ID, once for updated payee-index
+        when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any()))
                 .thenReturn(Mono.empty());
+        // getState for payee-index (appendToIndex reads it first)
+        when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
+                .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
         when(daprClient.publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any()))
                 .thenReturn(Mono.empty());
 
@@ -51,8 +57,44 @@ class PayeeServiceTest {
                 })
                 .verifyComplete();
 
-        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), anyString(), any(Payee.class));
+        // Verify both saveState calls and the publish
+        verify(daprClient, times(2)).saveState(eq(PayeeService.STORE), anyString(), any());
         verify(daprClient, times(1)).publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any());
+    }
+
+    @Test
+    @DisplayName("Should propagate error when saveState fails")
+    void test_addPayee_whenSaveStateFails_propagatesError() {
+        // Arrange
+        Payee payee = new Payee("Alice", "ACC001", "BNKA");
+        when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any()))
+                .thenReturn(Mono.error(new RuntimeException("Dapr state store unavailable")));
+
+        // Act & Assert
+        StepVerifier.create(payeeService.addPayee(payee))
+                .expectErrorMessage("Dapr state store unavailable")
+                .verify();
+
+        verify(daprClient, never()).publishEvent(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Should propagate error when publishEvent fails after successful save")
+    @SuppressWarnings("unchecked")
+    void test_addPayee_whenPublishEventFails_propagatesError() {
+        // Arrange
+        Payee payee = new Payee("Alice", "ACC001", "BNKA");
+        when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any()))
+                .thenReturn(Mono.empty());
+        when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
+                .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
+        when(daprClient.publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any()))
+                .thenReturn(Mono.error(new RuntimeException("Pub/sub unavailable")));
+
+        // Act & Assert
+        StepVerifier.create(payeeService.addPayee(payee))
+                .expectErrorMessage("Pub/sub unavailable")
+                .verify();
     }
 
     // -------------------------------------------------------------------------
@@ -64,12 +106,29 @@ class PayeeServiceTest {
     @SuppressWarnings("unchecked")
     void test_getPayees_emptyStore_returnsEmptyList() {
         // Arrange
-        when(daprClient.getState(eq(PayeeService.STORE), eq("payee-index"), eq(List.class)))
-                .thenReturn(Mono.just(new State<>("payee-index", null, null, null, null)));
+        when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
+                .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
 
         // Act & Assert
         StepVerifier.create(payeeService.getPayees())
                 .assertNext(list -> assertTrue(list.isEmpty()))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("Should return all payees when payee-index is populated")
+    @SuppressWarnings("unchecked")
+    void test_getPayees_withPayees_returnsPopulatedList() {
+        // Arrange
+        List<Payee> stored = new ArrayList<>();
+        stored.add(new Payee("Alice", "ACC001", "BNKA"));
+        stored.add(new Payee("Bob",   "ACC002", "BNKB"));
+        when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
+                .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, stored, null, null, null)));
+
+        // Act & Assert
+        StepVerifier.create(payeeService.getPayees())
+                .assertNext(list -> assertEquals(2, list.size()))
                 .verifyComplete();
     }
 
@@ -78,13 +137,21 @@ class PayeeServiceTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("Should return true and delete state when payee id exists")
+    @DisplayName("Should return true, delete state, and remove from index when payee id exists")
+    @SuppressWarnings("unchecked")
     void test_deletePayee_existingId_returnsTrueAndDeletesState() {
         // Arrange
         Payee existing = new Payee("Alice", "ACC001", "BNKA");
+        existing.setId("abc-123");
+        List<Payee> index = new ArrayList<>(List.of(existing));
         when(daprClient.getState(eq(PayeeService.STORE), eq("abc-123"), eq(Payee.class)))
                 .thenReturn(Mono.just(new State<>("abc-123", existing, null, null, null)));
         when(daprClient.deleteState(eq(PayeeService.STORE), eq("abc-123")))
+                .thenReturn(Mono.empty());
+        // removeFromIndex: reads index then saves updated list
+        when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
+                .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, index, null, null, null)));
+        when(daprClient.saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any()))
                 .thenReturn(Mono.empty());
 
         // Act & Assert
@@ -93,6 +160,7 @@ class PayeeServiceTest {
                 .verifyComplete();
 
         verify(daprClient, times(1)).deleteState(PayeeService.STORE, "abc-123");
+        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any());
     }
 
     @Test

@@ -60,7 +60,7 @@ public class PayeeController {
                 session.getSessionId(),
                 "OTP sent via " + session.getMfaMethod() + ". Please verify to complete adding the payee.",
                 session.getMfaMethod(),
-                session.getOtpCode()   // demo only – remove in production
+                null   // OTP never returned in API response — delivered out-of-band
         );
 
         return ResponseEntity.ok(response);

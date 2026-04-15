@@ -63,7 +63,12 @@ class PayeeControllerSecurityTest {
     void test_getPayees_authenticated_returns200() throws Exception {
         when(payeeService.getPayees()).thenReturn(Mono.just(Collections.emptyList()));
 
-        mockMvc.perform(get("/api/payees"))
+        // Mono<ResponseEntity<>> is async — use asyncDispatch to get real status code
+        MvcResult mvcResult = mockMvc.perform(get("/api/payees"))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk());
     }
 

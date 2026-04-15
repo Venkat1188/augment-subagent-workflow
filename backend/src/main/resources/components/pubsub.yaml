@@ -10,5 +10,9 @@ spec:
       secretKeyRef:
         name: redis-secret
         key: redisHost
+    - name: redisPassword
+      secretKeyRef:
+        name: redis-secret
+        key: redisPassword
 auth:
   secretStore: local-secret-store
