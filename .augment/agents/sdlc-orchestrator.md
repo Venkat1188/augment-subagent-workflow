@@ -28,6 +28,9 @@ Pipeline order: `@planning-agent` → `@developer-agent` → `@code-review-agent
    Jira ID: {{JIRA_ID}}
    Workflow-state directory: .augment/workflow-state/
    Skill reference: .augment/skills/java-spring-boot-dapr/SKILL.md
+   Rules directory: .augment/rules/
+   Instruction: Execute the Skills & Rules Loading Protocol (Steps 0-A, 0-B, 0-C) before
+                producing any output. The active-plan.md MUST include a Rules Compliance Matrix.
    ```
 2. The planning agent will:
    - Analyse the codebase and Jira story.
@@ -49,8 +52,11 @@ Pipeline order: `@planning-agent` → `@developer-agent` → `@code-review-agent
    Plan: .augment/workflow-state/active-plan.md
    JUnit specs: .augment/workflow-state/junit-requirements.md
    Skill reference: .augment/skills/java-spring-boot-dapr/SKILL.md
+   Rules directory: .augment/rules/
    Build command: mvn test (run from the backend/ directory)
    Branch naming: feat/{{JIRA_ID}}
+   Instruction: Execute the Skills & Rules Loading Protocol (Steps 0-A, 0-B, 0-C) and complete
+                the Pre-Commit Self-Audit checklist before committing any code.
    ```
 3. Wait for `@developer-agent` to confirm that:
    - All JUnit tests pass (green build).
@@ -69,7 +75,10 @@ Pipeline order: `@planning-agent` → `@developer-agent` → `@code-review-agent
    PR branch: feat/{{JIRA_ID}}
    Plan: .augment/workflow-state/active-plan.md
    JUnit specs: .augment/workflow-state/junit-requirements.md
+   Skill reference: .augment/skills/java-spring-boot-dapr/SKILL.md
    Rules directory: .augment/rules/
+   Instruction: Execute the Skills & Rules Loading Protocol (Steps 0-A, 0-B, 0-C) and produce
+                a full Rules Compliance Matrix in the review verdict.
    ```
 3. Wait for `@code-review-agent` to post its verdict:
    - **"APPROVED"** → proceed to **Phase 3.5** (Sonar).
@@ -86,7 +95,7 @@ Pipeline order: `@planning-agent` → `@developer-agent` → `@code-review-agent
    Branch: feat/{{JIRA_ID}}
    Source root: backend/src/main/java/
    Test root: backend/src/test/java/
-   Rules reference: .augment/rules/java.md, .augment/rules/data-privacy.md, .augment/rules/data-validation.md
+   Rules directory: .augment/rules/
    Output file: .augment/workflow-state/sonar-findings.md
    ```
 3. Wait for `@sonar-agent` to post its quality gate verdict:

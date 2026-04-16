@@ -1,6 +1,6 @@
 ---
 name: "planning-agent"
-description: "Analyzes Jira story requirements and the existing codebase to generate a detailed technical implementation plan and JUnit 5 / Mockito test specifications."
+description: "Analyzes Jira story requirements and the existing codebase to generate a detailed technical implementation plan and JUnit 5 / Mockito test specifications. Applies ALL applicable skills and rules before producing any output."
 color: "blue"
 ---
 
@@ -10,10 +10,64 @@ color: "blue"
 - `JIRA_ID` — the story identifier (e.g. `SCRUM-42`)
 - Workflow-state directory: `.augment/workflow-state/`
 - Skill reference: `.augment/skills/java-spring-boot-dapr/SKILL.md`
+- Rules directory: `.augment/rules/`
+
+---
+
+## ⚡ Mandatory: Skills & Rules Loading Protocol
+
+**This is the FIRST thing to do before any analysis or output. No artefact is produced until all applicable skills and rules are loaded.**
+
+### Step 0-A — Load the Skill
+
+Read `.augment/skills/java-spring-boot-dapr/SKILL.md` in full. Extract and internalize:
+- Required dependency versions (Java, Spring Boot, Dapr SDK)
+- Mandatory configuration keys (virtual threads, gRPC endpoint, tracing)
+- Dapr building block patterns (state, pub/sub, secrets, service invocation)
+- Observability requirements (micrometer-tracing, W3C propagation)
+
+### Step 0-B — Load ALL Applicable Rules
+
+List every file in `.augment/rules/`. For each rule file, determine applicability based on the tech stack and story scope, then **read it in full if applicable**:
+
+| Rule File | Load When |
+|---|---|
+| `java.md` | Always (Java project) |
+| `data-privacy.md` | Always (handles user/financial data) |
+| `data-validation.md` | Always (REST API with request bodies) |
+| `input-validation.md` | Always (REST API with request bodies) |
+| `error-handling.md` | Always |
+| `logging.md` | Always |
+| `naming-conventions.md` | Always |
+| `code-complexity.md` | Always |
+| `documentation.md` | Always |
+| `rest.md` | Story touches REST endpoints |
+| `api-security.md` | Story touches REST endpoints |
+| `data-serialization.md` | Story serializes/deserializes objects |
+| `secrets-management.md` | Story uses credentials, tokens, or keys |
+| `cryptography.md` | Story involves hashing, OTPs, or encryption |
+| `concurrency.md` | Story touches multi-threaded or async code |
+| `memory-management.md` | Story uses in-memory caches or sessions |
+| `unit-testing.md` | Always |
+| `test-coverage.md` | Always |
+| `integration-testing.md` | Story integrates with Dapr, Redis, or external APIs |
+| `mcp-integration.md` | Story uses MCP tools |
+| `caching.md` | Story uses caches or session stores |
+| `docker.md` | Story modifies Dockerfile or docker-compose |
+| `kubernetes.md` | Story modifies K8s manifests |
+| `sql.md` | Story uses SQL queries |
+| `react.md` | Story has frontend components |
+| `typescript.md` | Story has TypeScript code |
+
+### Step 0-C — Build the Rules Compliance Matrix
+
+After reading all applicable rules, build a table mapping each rule to the planned implementation. This table becomes a section in `active-plan.md` and is the checklist that `@developer-agent` and `@code-review-agent` will use.
+
+---
 
 ## Step-by-Step Workflow
 
-1. **Read Skill**: Load `.augment/skills/java-spring-boot-dapr/SKILL.md` for technology standards (Java 26, Spring Boot 4, Dapr 1.17.1).
+1. **Execute Steps 0-A, 0-B, 0-C above** before proceeding.
 2. **Fetch Requirements**:
    - Attempt to retrieve the Jira story via the Jira MCP tool using `JIRA_ID`.
    - If Jira is unavailable, ask the user: *"Please paste the acceptance criteria / story description for {{JIRA_ID}}."*
@@ -21,13 +75,27 @@ color: "blue"
 4. **Generate Artifacts** — write both files:
    - **`active-plan.md`** → `.augment/workflow-state/active-plan.md`
      - Gap analysis (current vs skill standard)
-     - `pom.xml` dependency changes
+     - `pom.xml` dependency changes required by the skill
      - New / modified classes with full method signatures
      - HTTP endpoint specification
      - End-to-end flow diagrams
+     - **Rules Compliance Matrix** (from Step 0-C): for every applicable rule, state the planned implementation approach. Example:
+       ```
+       | Rule | Requirement | Planned Approach |
+       |------|-------------|-----------------|
+       | java [dapr-idempotent-pubsub] | At-least-once delivery must be idempotent | Track processedId in state store before handling |
+       | data-privacy [identify-pii-correctly] | PII fields must be documented | Javadoc + @PiiField on all sensitive model fields |
+       | data-validation [normalize-input-data] | Trim/normalize before persistence | .strip() on all String fields in service layer |
+       | error-handling [avoid-sensitive-data-in-errors] | No stack traces in responses | GlobalExceptionHandler with ProblemDetail (RFC 7807) |
+       | logging [mask-pii-in-logs] | PII never in log output | Log only masked/tokenized values |
+       | api-security [rate-limiting] | Protect sensitive endpoints | Document rate-limit headers or note infra-layer enforcement |
+       | cryptography [secure-otp-storage] | OTPs stored as hashes | BCrypt or PBKDF2 before storing |
+       ```
    - **`junit-requirements.md`** → `.augment/workflow-state/junit-requirements.md`
      - Test class name, `@ExtendWith`, `@Mock`, `@InjectMocks` declarations
      - Every `@Test` method: name, `@DisplayName`, Arrange/Act/Assert body
+     - Must include boundary-value and malicious-input tests per `data-validation [test-validation-thoroughly]`
+     - Must include negative tests per `unit-testing [test-edge-cases]`
      - No `@BeforeEach` that creates `new ServiceClass()` when `@InjectMocks` is used — Mockito handles injection automatically
 5. **HITL Loop**: Present both artefacts to the user and ask:
    > "Does this implementation plan and JUnit coverage look correct? Provide details to refine or type **'Approved'** to proceed."
