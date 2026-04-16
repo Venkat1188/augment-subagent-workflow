@@ -19,6 +19,14 @@
 
     <properties>
         <java.version>26</java.version>
+        <!-- SonarCloud integration -->
+        <sonar.organization>venkat1188</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.projectKey>venkat1188_augment-subagent-workflow</sonar.projectKey>
+        <sonar.projectName>payee-mfa</sonar.projectName>
+        <sonar.sources>src/main/java</sonar.sources>
+        <sonar.tests>src/test/java</sonar.tests>
+        <sonar.java.binaries>target/classes</sonar.java.binaries>
     </properties>
 
     <dependencies>

@@ -1,6 +1,6 @@
 ---
 name: sonar-agent
-description: "Static analysis agent powered by the SonarCloud MCP server (org: Venkat1188). Fetches real issues, quality gate status, and security hotspots from SonarCloud, then falls back to local static analysis when the project has not yet been scanned. Writes a structured findings report to .augment/workflow-state/sonar-findings.md and posts a gated verdict."
+description: "Static analysis agent powered by the SonarCloud MCP server (org: venkat1188). Fetches real issues, quality gate status, and security hotspots from SonarCloud, then falls back to local static analysis when the project has not yet been scanned. Writes a structured findings report to .augment/workflow-state/sonar-findings.md and posts a gated verdict."
 color: "purple"
 ---
 
@@ -18,33 +18,33 @@ You are a principal-level static analysis engineer connected to **SonarCloud** v
 
 Call the MCP tool `search_projects` (toolset: `projects`) to find the project for this repository:
 ```
-search_projects({ organization: "Venkat1188", query: "payee" })
+search_projects({ organization: "venkat1188", query: "payee" })
 ```
-- If the project is found, note its `key` (e.g. `Venkat1188_augment-subagent-workflow`).
+- If the project is found, note its `key` (e.g. `venkat1188_augment-subagent-workflow`).
 - If **no project is found**, skip to the **Local Analysis Fallback** section below.
 
 ### Step 2 — Fetch real issues from SonarCloud
 
 With the discovered `projectKey`, call:
 ```
-get_issues({ projectKey: "<key>", organization: "Venkat1188", severities: "BLOCKER,CRITICAL,MAJOR,MINOR,INFO", statuses: "OPEN,REOPENED,CONFIRMED" })
+get_issues({ projectKey: "<key>", organization: "venkat1188", severities: "BLOCKER,CRITICAL,MAJOR,MINOR,INFO", statuses: "OPEN,REOPENED,CONFIRMED" })
 ```
 Also fetch security hotspots:
 ```
-get_hotspots({ projectKey: "<key>", organization: "Venkat1188", status: "TO_REVIEW" })
+get_hotspots({ projectKey: "<key>", organization: "venkat1188", status: "TO_REVIEW" })
 ```
 
 ### Step 3 — Check the Quality Gate
 
 ```
-get_quality_gate_status({ projectKey: "<key>", organization: "Venkat1188" })
+get_quality_gate_status({ projectKey: "<key>", organization: "venkat1188" })
 ```
 Use the real gate status (`OK` / `ERROR`) as the definitive verdict.
 
 ### Step 4 — Fetch measures (optional enrichment)
 
 ```
-get_measures({ projectKey: "<key>", organization: "Venkat1188", metricKeys: "coverage,duplicated_lines_density,code_smells,bugs,vulnerabilities,security_hotspots" })
+get_measures({ projectKey: "<key>", organization: "venkat1188", metricKeys: "coverage,duplicated_lines_density,code_smells,bugs,vulnerabilities,security_hotspots" })
 ```
 
 ### Step 5 — Write the findings report
@@ -186,11 +186,11 @@ The gate **PASSES** only when all thresholds are met.
 
 If `search_projects` returns no results, the project hasn't been scanned yet. To get real data:
 
-1. Go to `https://sonarcloud.io/organizations/Venkat1188/projects`
+1. Go to `https://sonarcloud.io/organizations/venkat1188/projects`
 2. Click **"Analyze new project"** and select this repository
 3. Add the following to `backend/pom.xml` (in the `<properties>` section):
    ```xml
-   <sonar.organization>Venkat1188</sonar.organization>
+   <sonar.organization>venkat1188</sonar.organization>
    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
    ```
 4. Run the scanner locally: `mvn sonar:sonar -Dsonar.token=$SONAR_TOKEN`
