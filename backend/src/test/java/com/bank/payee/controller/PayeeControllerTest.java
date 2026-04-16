@@ -31,6 +31,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// S125 — section-divider comments (e.g. "// DELETE /api/payees/{id}") are documentation
+// headers, not commented-out Java code. Suppressed at class level to avoid per-method noise.
+@SuppressWarnings("java:S125")
 @ExtendWith(MockitoExtension.class)
 class PayeeControllerTest {
 

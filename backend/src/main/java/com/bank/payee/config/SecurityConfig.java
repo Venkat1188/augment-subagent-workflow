@@ -17,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
+    @SuppressWarnings("java:S112") // Spring Security HttpSecurity.build() declares a checked Exception; no narrower type is available from the framework.
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             // S4502 — CSRF disabled intentionally: this API is stateless (no browser sessions,

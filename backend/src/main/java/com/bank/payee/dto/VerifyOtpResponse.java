@@ -11,7 +11,11 @@ public class VerifyOtpResponse {
     private Integer remainingAttempts;
     private LocalDateTime lockedUntil;
 
-    public VerifyOtpResponse() {}
+    // S1186 — empty no-arg constructor required by Jackson for JSON deserialization.
+    // Fields are populated via static factory methods (success, failure, locked, error).
+    public VerifyOtpResponse() {
+        // Jackson deserialization constructor — intentionally empty
+    }
 
     public static VerifyOtpResponse success(String message, Payee payee) {
         VerifyOtpResponse r = new VerifyOtpResponse();
