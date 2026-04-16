@@ -17,10 +17,13 @@ public class OtpService {
     }
 
     public void sendSmsOtp(String otp) {
-        log.info("📱 [MOCK SMS] OTP {} dispatched to customer's registered mobile number", otp);
+        // S2068/S5145 — OTP is a sensitive credential; never log its value.
+        // The OTP is delivered out-of-band to the customer's registered mobile number.
+        log.info("📱 [MOCK SMS] OTP dispatched to customer's registered mobile number");
     }
 
     public void sendTotpCode(String otp) {
-        log.info("🔐 [MOCK TOTP] Current Authenticator App code: {}", otp);
+        // S2068/S5145 — OTP is a sensitive credential; never log its value.
+        log.info("🔐 [MOCK TOTP] Authenticator app code generated and sent to registered device");
     }
 }

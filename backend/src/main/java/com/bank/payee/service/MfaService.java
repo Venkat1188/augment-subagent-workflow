@@ -62,13 +62,14 @@ public class MfaService {
             return VerifyResult.success(session.getPendingPayee());
         }
 
-        session.incrementFailedAttempts();
-        if (session.getFailedAttempts() >= MAX_ATTEMPTS) {
+        // S3008 — incrementAndGet() is atomic; the returned value is the definitive count.
+        int attempts = session.incrementFailedAttempts();
+        if (attempts >= MAX_ATTEMPTS) {
             LocalDateTime lockUntil = LocalDateTime.now().plusMinutes(LOCKOUT_MINUTES);
             session.setLockedUntil(lockUntil);
             return VerifyResult.locked(lockUntil);
         }
 
-        return VerifyResult.wrongOtp(MAX_ATTEMPTS - session.getFailedAttempts());
+        return VerifyResult.wrongOtp(MAX_ATTEMPTS - attempts);
     }
 }

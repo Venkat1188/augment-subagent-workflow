@@ -19,6 +19,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // S4502 — CSRF disabled intentionally: this API is stateless (no browser sessions,
+            // no cookies used for authentication). All requests require HTTP Basic credentials
+            // on every call. CSRF attacks require an authenticated session cookie, which is
+            // absent here. Ensure TLS is enforced at the load-balancer/ingress layer.
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

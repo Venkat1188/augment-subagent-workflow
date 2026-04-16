@@ -55,10 +55,12 @@ public class PayeeService {
         payee.setId(UUID.randomUUID().toString());
         payee.setAddedAt(LocalDateTime.now());
 
+        // S6096 — never publish raw account numbers to the message broker.
+        // Use the built-in mask helper so only the last 4 digits are visible to subscribers.
         PayeeAddedEvent event = new PayeeAddedEvent(
                 payee.getId(),
                 payee.getName(),
-                payee.getAccountNumber(),
+                PayeeAddedEvent.maskAccountNumber(payee.getAccountNumber()),
                 payee.getBankCode(),
                 payee.getAddedAt().toString()
         );
