@@ -5,6 +5,7 @@ import com.bank.payee.dto.InitiateMfaResponse;
 import com.bank.payee.dto.VerifyOtpRequest;
 import com.bank.payee.dto.VerifyOtpResponse;
 import com.bank.payee.model.MfaMethod;
+import com.bank.payee.model.MfaMethod;
 import com.bank.payee.model.MfaSession;
 import com.bank.payee.model.Payee;
 import com.bank.payee.service.MfaService;
@@ -24,6 +25,13 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
+
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -257,5 +265,111 @@ class PayeeControllerTest {
         // Assert
         assertEquals(404, response.getStatusCode().value());
         verify(payeeService, times(1)).deletePayee(eq("no-such-id"), anyString());
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: data-validation [test-validation-thoroughly]
+    // Boundary-value and malicious-input tests for AddPayeeRequest / VerifyOtpRequest
+    // -------------------------------------------------------------------------
+
+    private static final Validator VALIDATOR;
+    static {
+        try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+            VALIDATOR = factory.getValidator();
+        }
+    }
+
+    @Test
+    @DisplayName("[Validation] accountNumber with letters should fail @Pattern")
+    void test_addPayeeRequest_accountNumberWithLetters_failsValidation() {
+        AddPayeeRequest req = new AddPayeeRequest();
+        req.setPayeeName("Alice");
+        req.setAccountNumber("ACC001XY");   // letters — violates [0-9]+
+        req.setBankCode("BNKA");
+        req.setMfaMethod(MfaMethod.SMS);
+
+        Set<ConstraintViolation<AddPayeeRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("accountNumber")),
+                "Expected violation on accountNumber");
+    }
+
+    @Test
+    @DisplayName("[Validation] accountNumber with 21 digits should fail @Size(max=20)")
+    void test_addPayeeRequest_accountNumberTooLong_failsValidation() {
+        AddPayeeRequest req = new AddPayeeRequest();
+        req.setPayeeName("Alice");
+        req.setAccountNumber("123456789012345678901");   // 21 digits
+        req.setBankCode("BNKA");
+        req.setMfaMethod(MfaMethod.SMS);
+
+        Set<ConstraintViolation<AddPayeeRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("accountNumber")),
+                "Expected violation on accountNumber length");
+    }
+
+    @Test
+    @DisplayName("[Validation] accountNumber with 5 digits should fail @Size(min=6)")
+    void test_addPayeeRequest_accountNumberTooShort_failsValidation() {
+        AddPayeeRequest req = new AddPayeeRequest();
+        req.setPayeeName("Alice");
+        req.setAccountNumber("12345");   // 5 digits — below min=6
+        req.setBankCode("BNKA");
+        req.setMfaMethod(MfaMethod.SMS);
+
+        Set<ConstraintViolation<AddPayeeRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("accountNumber")),
+                "Expected violation on accountNumber min length");
+    }
+
+    @Test
+    @DisplayName("[Validation] valid AddPayeeRequest with 6-digit numeric account passes all constraints")
+    void test_addPayeeRequest_valid_noViolations() {
+        AddPayeeRequest req = new AddPayeeRequest();
+        req.setPayeeName("Alice");
+        req.setAccountNumber("123456");   // exactly at min boundary
+        req.setBankCode("BNKA");
+        req.setMfaMethod(MfaMethod.SMS);
+
+        Set<ConstraintViolation<AddPayeeRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.isEmpty(), "Expected no violations for a valid request: " + violations);
+    }
+
+    @Test
+    @DisplayName("[Validation] 5-digit otpCode should fail @Size(min=6,max=6)")
+    void test_verifyOtpRequest_fiveDigitOtp_failsValidation() {
+        VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "12345");   // 5 digits
+
+        Set<ConstraintViolation<VerifyOtpRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("otpCode")),
+                "Expected violation on otpCode length");
+    }
+
+    @Test
+    @DisplayName("[Validation] 7-digit otpCode should fail @Size(min=6,max=6)")
+    void test_verifyOtpRequest_sevenDigitOtp_failsValidation() {
+        VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "1234567");   // 7 digits
+
+        Set<ConstraintViolation<VerifyOtpRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("otpCode")),
+                "Expected violation on otpCode length");
+    }
+
+    @Test
+    @DisplayName("[Validation] alpha otpCode should fail @Pattern([0-9]{6})")
+    void test_verifyOtpRequest_alphaOtp_failsValidation() {
+        VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "ABCDEF");   // letters
+
+        Set<ConstraintViolation<VerifyOtpRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.stream().anyMatch(v -> v.getPropertyPath().toString().equals("otpCode")),
+                "Expected violation on otpCode pattern");
+    }
+
+    @Test
+    @DisplayName("[Validation] exactly 6-digit otpCode passes all constraints")
+    void test_verifyOtpRequest_sixDigitOtp_noViolations() {
+        VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "123456");
+
+        Set<ConstraintViolation<VerifyOtpRequest>> violations = VALIDATOR.validate(req);
+        assertTrue(violations.isEmpty(), "Expected no violations for valid OTP: " + violations);
     }
 }

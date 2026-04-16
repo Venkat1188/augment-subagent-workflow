@@ -6,6 +6,17 @@ package com.bank.payee.model;
  *
  * <p>Wrapped in a {@code CloudEvent<PayeeAddedEvent>} envelope by the Dapr SDK.
  *
+ * <p><b>Rule: java [dapr-idempotent-pubsub]</b> — Dapr guarantees at-least-once delivery.
+ * Downstream subscribers MUST implement idempotency by tracking processed {@code payeeId}
+ * values in their own state store. The {@code payeeId} field serves as the idempotency key
+ * (it equals the UUID assigned to the {@link Payee} entity at creation time).
+ * Example guard in a subscriber:
+ * <pre>{@code
+ *   if (stateStore.exists("processed:" + event.payeeId())) return;
+ *   stateStore.save("processed:" + event.payeeId(), Boolean.TRUE);
+ *   // ... handle event
+ * }</pre>
+ *
  * <p><b>Privacy (S6096):</b> Account numbers are PII. This record stores only
  * a <em>masked</em> representation (last 4 digits, e.g. {@code ****1234}) so that
  * downstream subscribers cannot read full account numbers from the message broker.

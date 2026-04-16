@@ -56,6 +56,11 @@ public class PayeeService {
         payee.setId(UUID.randomUUID().toString());
         payee.setAddedAt(LocalDateTime.now());
         payee.setOwnerId(ownerId);   // CWE-639 — bind this record to its owner at creation time
+        // Rule: data-validation [normalize-input-data] — trim whitespace before persistence
+        // so that "Alice " and "Alice" are stored identically and comparisons are predictable.
+        if (payee.getName() != null) {
+            payee.setName(payee.getName().strip());
+        }
 
         // S6096 — never publish raw account numbers to the message broker.
         // Use the built-in mask helper so only the last 4 digits are visible to subscribers.
