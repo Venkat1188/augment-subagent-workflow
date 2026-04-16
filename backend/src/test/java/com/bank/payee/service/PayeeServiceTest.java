@@ -51,12 +51,13 @@ class PayeeServiceTest {
                 .thenReturn(Mono.empty());
 
         // Act & Assert
-        StepVerifier.create(payeeService.addPayee(payee))
+        StepVerifier.create(payeeService.addPayee(payee, "user1"))
                 .assertNext(saved -> {
                     assertNotNull(saved.getId(), "id must be populated");
                     assertNotNull(saved.getAddedAt(), "addedAt must be populated");
                     assertEquals("Alice", saved.getName());
                     assertEquals("ACC001", saved.getAccountNumber());
+                    assertEquals("user1", saved.getOwnerId(), "ownerId must be set from caller");
                 })
                 .verifyComplete();
 
@@ -75,7 +76,7 @@ class PayeeServiceTest {
                 .thenReturn(Mono.error(new RuntimeException("Dapr state store unavailable")));
 
         // Act & Assert
-        StepVerifier.create(payeeService.addPayee(payee))
+        StepVerifier.create(payeeService.addPayee(payee, "user1"))
                 .expectErrorMessage("Dapr state store unavailable")
                 .verify();
 
@@ -100,7 +101,7 @@ class PayeeServiceTest {
                 .thenReturn(Mono.error(new RuntimeException("Pub/sub unavailable")));
 
         // Act & Assert
-        StepVerifier.create(payeeService.addPayee(payee))
+        StepVerifier.create(payeeService.addPayee(payee, "user1"))
                 .expectErrorMessage("Pub/sub unavailable")
                 .verify();
     }
@@ -117,8 +118,8 @@ class PayeeServiceTest {
         when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
                 .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
 
-        // Act & Assert
-        StepVerifier.create(payeeService.getPayees())
+        // Act & Assert — ownerId "user1" matches no entries (index is null/empty)
+        StepVerifier.create(payeeService.getPayees("user1"))
                 .assertNext(list -> assertTrue(list.isEmpty()))
                 .verifyComplete();
     }
@@ -128,14 +129,17 @@ class PayeeServiceTest {
     @SuppressWarnings("unchecked")
     void test_getPayees_withPayees_returnsPopulatedList() {
         // Arrange
+        // CWE-639: set ownerId so the getPayees filter returns them for "user1"
         List<Payee> stored = new ArrayList<>();
-        stored.add(new Payee("Alice", "ACC001", "BNKA"));
-        stored.add(new Payee("Bob",   "ACC002", "BNKB"));
+        Payee p1 = new Payee("Alice", "ACC001", "BNKA"); p1.setOwnerId("user1");
+        Payee p2 = new Payee("Bob",   "ACC002", "BNKB"); p2.setOwnerId("user1");
+        stored.add(p1);
+        stored.add(p2);
         when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
                 .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, stored, null, null, null)));
 
-        // Act & Assert
-        StepVerifier.create(payeeService.getPayees())
+        // Act & Assert — "user1" should see their 2 payees (filter by ownerId)
+        StepVerifier.create(payeeService.getPayees("user1"))
                 .assertNext(list -> assertEquals(2, list.size()))
                 .verifyComplete();
     }
@@ -151,6 +155,7 @@ class PayeeServiceTest {
         // Arrange
         Payee existing = new Payee("Alice", "ACC001", "BNKA");
         existing.setId("abc-123");
+        existing.setOwnerId("user1");  // CWE-639: ownership check requires matching ownerId
         List<Payee> index = new ArrayList<>(List.of(existing));
         when(daprClient.getState(eq(PayeeService.STORE), eq("abc-123"), eq(Payee.class)))
                 .thenReturn(Mono.just(new State<>("abc-123", existing, null, null, null)));
@@ -163,8 +168,8 @@ class PayeeServiceTest {
                 .thenReturn(Mono.empty());
 
         // Act & Assert
-        StepVerifier.create(payeeService.deletePayee("abc-123"))
-                .assertNext(result -> assertTrue(result, "Should return true for existing payee"))
+        StepVerifier.create(payeeService.deletePayee("abc-123", "user1"))
+                .assertNext(result -> assertTrue(result, "Should return true for existing payee owned by caller"))
                 .verifyComplete();
 
         verify(daprClient, times(1)).deleteState(PayeeService.STORE, "abc-123");
@@ -172,14 +177,14 @@ class PayeeServiceTest {
     }
 
     @Test
-    @DisplayName("Should return false and never call deleteState when payee id not found")
+    @DisplayName("Should return false when payee not found (CWE-639: also returns false when not owner)")
     void test_deletePayee_nonExistingId_returnsFalse() {
         // Arrange
         when(daprClient.getState(eq(PayeeService.STORE), eq("xyz-000"), eq(Payee.class)))
                 .thenReturn(Mono.just(new State<>("xyz-000", null, null, null, null)));
 
         // Act & Assert
-        StepVerifier.create(payeeService.deletePayee("xyz-000"))
+        StepVerifier.create(payeeService.deletePayee("xyz-000", "user1"))
                 .assertNext(result -> assertFalse(result, "Should return false for non-existent payee"))
                 .verifyComplete();
 

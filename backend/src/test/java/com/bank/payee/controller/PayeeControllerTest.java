@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -26,7 +27,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +48,13 @@ class PayeeControllerTest {
 
     @InjectMocks
     private PayeeController payeeController;
+
+    /** Returns a mock Authentication that reports the given principal name. */
+    private static Authentication mockAuth(String name) {
+        Authentication auth = mock(Authentication.class);
+        when(auth.getName()).thenReturn(name);
+        return auth;
+    }
 
     // -------------------------------------------------------------------------
     // POST /api/payees/initiate-mfa
@@ -82,12 +92,12 @@ class PayeeControllerTest {
         // Arrange
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
         when(mfaService.verifyOtp("sess-001", "123456")).thenReturn(VerifyResult.success(payee));
-        when(payeeService.addPayee(any(Payee.class))).thenReturn(Mono.just(payee));
+        when(payeeService.addPayee(any(Payee.class), anyString())).thenReturn(Mono.just(payee));
 
         VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "123456");
 
         // Act
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req).block();
+        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req, mockAuth("user1")).block();
 
         // Assert
         assertEquals(200, response.getStatusCode().value());
@@ -108,7 +118,7 @@ class PayeeControllerTest {
         VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "000000");
 
         // Act
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req).block();
+        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req, mockAuth("user1")).block();
 
         // Assert
         assertEquals(400, response.getStatusCode().value());
@@ -131,7 +141,7 @@ class PayeeControllerTest {
         VerifyOtpRequest req = new VerifyOtpRequest("sess-001", "000000");
 
         // Act
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req).block();
+        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req, mockAuth("user1")).block();
 
         // Assert
         assertEquals(423, response.getStatusCode().value());
@@ -152,7 +162,7 @@ class PayeeControllerTest {
         VerifyOtpRequest req = new VerifyOtpRequest("bad-session", "000000");
 
         // Act
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req).block();
+        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req, mockAuth("user1")).block();
 
         // Assert
         assertEquals(400, response.getStatusCode().value());
@@ -171,7 +181,7 @@ class PayeeControllerTest {
         VerifyOtpRequest req = new VerifyOtpRequest("old-session", "111111");
 
         // Act
-        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req).block();
+        ResponseEntity<VerifyOtpResponse> response = payeeController.verifyOtp(req, mockAuth("user1")).block();
 
         // Assert
         assertEquals(400, response.getStatusCode().value());
@@ -189,26 +199,26 @@ class PayeeControllerTest {
         Payee payee1 = new Payee("Alice", "ACC001", "BNKA");
         Payee payee2 = new Payee("Bob", "ACC002", "BNKB");
         List<Payee> payees = Arrays.asList(payee1, payee2);
-        when(payeeService.getPayees()).thenReturn(Mono.just(payees));
+        when(payeeService.getPayees(anyString())).thenReturn(Mono.just(payees));
 
         // Act
-        ResponseEntity<List<Payee>> response = payeeController.getPayees().block();
+        ResponseEntity<List<Payee>> response = payeeController.getPayees(mockAuth("user1")).block();
 
         // Assert
         assertEquals(200, response.getStatusCode().value());
         assertNotNull(response.getBody());
         assertEquals(2, response.getBody().size());
-        verify(payeeService, times(1)).getPayees();
+        verify(payeeService, times(1)).getPayees(anyString());
     }
 
     @Test
     @DisplayName("Should return 200 with empty array when no payees exist")
     void test_getPayees_emptyStore_returns200WithEmptyList() {
         // Arrange
-        when(payeeService.getPayees()).thenReturn(Mono.just(Collections.emptyList()));
+        when(payeeService.getPayees(anyString())).thenReturn(Mono.just(Collections.emptyList()));
 
         // Act
-        ResponseEntity<List<Payee>> response = payeeController.getPayees().block();
+        ResponseEntity<List<Payee>> response = payeeController.getPayees(mockAuth("user1")).block();
 
         // Assert
         assertEquals(200, response.getStatusCode().value());
@@ -224,28 +234,28 @@ class PayeeControllerTest {
     @DisplayName("Should return 204 No Content when payee exists and is deleted")
     void test_deletePayee_existingId_returns204() {
         // Arrange
-        when(payeeService.deletePayee("payee-id-1")).thenReturn(Mono.just(true));
+        when(payeeService.deletePayee(eq("payee-id-1"), anyString())).thenReturn(Mono.just(true));
 
         // Act
-        ResponseEntity<Void> response = payeeController.deletePayee("payee-id-1").block();
+        ResponseEntity<Void> response = payeeController.deletePayee("payee-id-1", mockAuth("user1")).block();
 
         // Assert
         assertEquals(204, response.getStatusCode().value());
         assertNull(response.getBody());
-        verify(payeeService, times(1)).deletePayee("payee-id-1");
+        verify(payeeService, times(1)).deletePayee(eq("payee-id-1"), anyString());
     }
 
     @Test
-    @DisplayName("Should return 404 Not Found when payee does not exist")
+    @DisplayName("Should return 404 Not Found when payee does not exist or caller is not the owner")
     void test_deletePayee_nonExistingId_returns404() {
         // Arrange
-        when(payeeService.deletePayee("no-such-id")).thenReturn(Mono.just(false));
+        when(payeeService.deletePayee(eq("no-such-id"), anyString())).thenReturn(Mono.just(false));
 
         // Act
-        ResponseEntity<Void> response = payeeController.deletePayee("no-such-id").block();
+        ResponseEntity<Void> response = payeeController.deletePayee("no-such-id", mockAuth("user1")).block();
 
         // Assert
         assertEquals(404, response.getStatusCode().value());
-        verify(payeeService, times(1)).deletePayee("no-such-id");
+        verify(payeeService, times(1)).deletePayee(eq("no-such-id"), anyString());
     }
 }

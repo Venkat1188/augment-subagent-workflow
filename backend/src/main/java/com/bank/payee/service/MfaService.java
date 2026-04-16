@@ -3,6 +3,9 @@ package com.bank.payee.service;
 import com.bank.payee.model.MfaMethod;
 import com.bank.payee.model.MfaSession;
 import com.bank.payee.model.Payee;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -12,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class MfaService {
+
+    private static final Logger log = LoggerFactory.getLogger(MfaService.class);
 
     static final int MAX_ATTEMPTS = 3;
     static final int LOCKOUT_MINUTES = 5;
@@ -71,5 +76,20 @@ public class MfaService {
         }
 
         return VerifyResult.wrongOtp(MAX_ATTEMPTS - attempts);
+    }
+
+    /**
+     * CWE-613 / CWE-400 — Evict expired MFA sessions every 60 s to prevent unbounded heap growth.
+     * Sessions expire after SESSION_EXPIRY_MINUTES; this sweeper ensures they are removed from the
+     * ConcurrentHashMap even if the client never calls verifyOtp (abandoned flows).
+     */
+    @Scheduled(fixedDelay = 60_000)
+    void evictExpiredSessions() {
+        int before = sessions.size();
+        sessions.entrySet().removeIf(e -> e.getValue().isExpired());
+        int evicted = before - sessions.size();
+        if (evicted > 0) {
+            log.info("MFA session eviction: removed {} expired session(s); {} active", evicted, sessions.size());
+        }
     }
 }

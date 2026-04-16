@@ -25,6 +25,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Collections;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
@@ -91,7 +92,7 @@ class PayeeControllerSecurityTest {
     @WithMockUser
     @DisplayName("GET /api/payees should return 200 when user is authenticated")
     void test_getPayees_authenticated_returns200() throws Exception {
-        when(payeeService.getPayees()).thenReturn(Mono.just(Collections.emptyList()));
+        when(payeeService.getPayees(anyString())).thenReturn(Mono.just(Collections.emptyList()));
 
         // Mono<ResponseEntity<>> is async — use asyncDispatch to get real status code
         // accept(APPLICATION_JSON) required so the message converter can be selected
@@ -123,7 +124,7 @@ class PayeeControllerSecurityTest {
     @WithMockUser
     @DisplayName("DELETE /api/payees/{id} should return 204 when authenticated and payee exists")
     void test_deletePayee_authenticated_existingId_returns204() throws Exception {
-        when(payeeService.deletePayee("some-uuid")).thenReturn(Mono.just(true));
+        when(payeeService.deletePayee(anyString(), anyString())).thenReturn(Mono.just(true));
 
         // Mono<ResponseEntity<Void>> is async — must use asyncDispatch to get the real status code
         MvcResult mvcResult = mockMvc.perform(delete("/api/payees/some-uuid"))

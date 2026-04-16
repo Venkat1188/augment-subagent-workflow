@@ -45,15 +45,17 @@ public class PayeeService {
 
     /**
      * Persists a confirmed payee in the Dapr state store, updates the
-     * {@code payee-index} list so that {@link #getPayees()} can return it,
+     * {@code payee-index} list so that {@link #getPayees(String)} can return it,
      * and publishes a {@link PayeeAddedEvent} to the {@value #TOPIC} topic.
      *
-     * @param payee the payee to store (id and addedAt will be populated)
+     * @param payee   the payee to store (id and addedAt will be populated)
+     * @param ownerId the authenticated principal name — stored for BOLA prevention (CWE-639)
      * @return {@code Mono<Payee>} — the stored payee
      */
-    public Mono<Payee> addPayee(Payee payee) {
+    public Mono<Payee> addPayee(Payee payee, String ownerId) {
         payee.setId(UUID.randomUUID().toString());
         payee.setAddedAt(LocalDateTime.now());
+        payee.setOwnerId(ownerId);   // CWE-639 — bind this record to its owner at creation time
 
         // S6096 — never publish raw account numbers to the message broker.
         // Use the built-in mask helper so only the last 4 digits are visible to subscribers.
@@ -74,30 +76,38 @@ public class PayeeService {
     }
 
     /**
-     * Returns all confirmed payees from the {@code payee-index} key in the Dapr state store.
+     * Returns confirmed payees that belong to {@code ownerId} from the Dapr state store.
+     * CWE-639 — filters the shared index to only expose the caller's own records.
      *
+     * @param ownerId the authenticated principal name
      * @return {@code Mono<List<Payee>>} — empty list if no payees stored yet
      */
     @SuppressWarnings("unchecked")
-    public Mono<List<Payee>> getPayees() {
+    public Mono<List<Payee>> getPayees(String ownerId) {
         return daprClient.getState(STORE, INDEX_KEY, List.class)
                 .map(state -> state.getValue() != null
-                        ? (List<Payee>) state.getValue()
-                        : List.of());
+                        ? ((List<Payee>) state.getValue()).stream()
+                                .filter(p -> ownerId.equals(p.getOwnerId()))
+                                .toList()
+                        : List.<Payee>of());
     }
 
     /**
      * Deletes a payee by its UUID from the Dapr state store and removes it
-     * from the {@code payee-index}.
+     * from the {@code payee-index}, but only if the caller is the owner.
+     * CWE-639 — returns {@code false} (not 403) when the payee exists but the
+     * caller does not own it, to avoid leaking whether the ID is valid.
      *
-     * @param id the UUID of the payee to delete
-     * @return {@code Mono<Boolean>} — {@code true} if deleted, {@code false} if not found
+     * @param id      the UUID of the payee to delete
+     * @param ownerId the authenticated principal name
+     * @return {@code Mono<Boolean>} — {@code true} if deleted, {@code false} if not found or not owned
      */
-    public Mono<Boolean> deletePayee(String id) {
+    public Mono<Boolean> deletePayee(String id, String ownerId) {
         return daprClient.getState(STORE, id, Payee.class)
                 .flatMap(state -> {
-                    if (state.getValue() == null) {
-                        return Mono.just(false);
+                    Payee payee = state.getValue();
+                    if (payee == null || !ownerId.equals(payee.getOwnerId())) {
+                        return Mono.just(false);   // not found OR not the owner — same response (CWE-639)
                     }
                     return daprClient.deleteState(STORE, id)
                             .then(Mono.defer(() -> removeFromIndex(id)))

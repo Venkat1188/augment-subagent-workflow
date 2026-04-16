@@ -1,2 +1,5 @@
 com\bank\payee\service\MfaServiceTest.class
+com\bank\payee\controller\PayeeControllerSecurityTest.class
+com\bank\payee\controller\PayeeControllerSecurityTest$WebMvcTestConfig.class
 com\bank\payee\controller\PayeeControllerTest.class
+com\bank\payee\service\PayeeServiceTest.class

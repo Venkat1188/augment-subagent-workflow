@@ -1,4 +1,5 @@
 com\bank\payee\controller\PayeeController.class
+com\bank\payee\model\PayeeAddedEvent.class
 com\bank\payee\dto\AddPayeeRequest.class
 com\bank\payee\service\VerifyResult.class
 com\bank\payee\dto\VerifyOtpResponse.class
@@ -11,5 +12,6 @@ com\bank\payee\PayeeApplication.class
 com\bank\payee\service\MfaService.class
 com\bank\payee\dto\VerifyOtpRequest.class
 com\bank\payee\service\PayeeService.class
+com\bank\payee\config\SecurityConfig.class
 com\bank\payee\model\MfaSession.class
 com\bank\payee\dto\InitiateMfaResponse.class

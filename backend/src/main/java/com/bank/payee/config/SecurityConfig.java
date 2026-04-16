@@ -20,13 +20,19 @@ public class SecurityConfig {
     @SuppressWarnings("java:S112") // Spring Security HttpSecurity.build() declares a checked Exception; no narrower type is available from the framework.
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // S4502 — CSRF disabled intentionally: this API is stateless (no browser sessions,
-            // no cookies used for authentication). All requests require HTTP Basic credentials
-            // on every call. CSRF attacks require an authenticated session cookie, which is
-            // absent here. Ensure TLS is enforced at the load-balancer/ingress layer.
+            // S4502 — CSRF disabled intentionally: stateless API using HTTP Basic on every request.
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // CWE-693 — explicit HTTP security headers for a banking API (SAST-05)
+            .headers(headers -> headers
+                .contentTypeOptions(opt -> {})                       // X-Content-Type-Options: nosniff
+                .frameOptions(frame -> frame.deny())                 // X-Frame-Options: DENY
+                .httpStrictTransportSecurity(hsts -> hsts            // HSTS: 1 year + subdomains
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31_536_000))
+                .contentSecurityPolicy(csp ->                        // CSP: API-only, no resources
+                    csp.policyDirectives("default-src 'none'; frame-ancestors 'none'")))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/api/payees/initiate-mfa").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/payees/verify-otp").authenticated()

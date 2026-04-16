@@ -12,6 +12,7 @@ import com.bank.payee.service.VerifyResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -75,12 +76,14 @@ public class PayeeController {
      */
     @PostMapping("/verify-otp")
     public Mono<ResponseEntity<VerifyOtpResponse>> verifyOtp(
-            @Valid @RequestBody VerifyOtpRequest request) {
+            @Valid @RequestBody VerifyOtpRequest request,
+            Authentication auth) {   // CWE-639 — bind the new payee to its owner at creation time
 
         VerifyResult result = mfaService.verifyOtp(request.getSessionId(), request.getOtpCode());
+        String ownerId = auth.getName();
 
         return switch (result.getStatus()) {
-            case SUCCESS -> payeeService.addPayee(result.getPayee())
+            case SUCCESS -> payeeService.addPayee(result.getPayee(), ownerId)
                     .map(saved -> ResponseEntity.ok(
                             VerifyOtpResponse.success("Payee added successfully.", saved)));
             case WRONG_OTP -> Mono.just(ResponseEntity.badRequest()
@@ -93,24 +96,29 @@ public class PayeeController {
     }
 
     /**
-     * GET /api/payees – returns all confirmed payees from the Dapr state store.
+     * GET /api/payees – returns only the payees owned by the authenticated caller.
+     * CWE-639 — filters by ownerId so users cannot enumerate other users' payees.
      *
+     * @param auth injected by Spring Security; provides the authenticated principal name
      * @return {@code Mono<ResponseEntity<List<Payee>>>} — 200 OK
      */
     @GetMapping
-    public Mono<ResponseEntity<List<Payee>>> getPayees() {
-        return payeeService.getPayees().map(ResponseEntity::ok);
+    public Mono<ResponseEntity<List<Payee>>> getPayees(Authentication auth) {
+        return payeeService.getPayees(auth.getName()).map(ResponseEntity::ok);
     }
 
     /**
-     * DELETE /api/payees/{id} – removes a payee from the Dapr state store.
+     * DELETE /api/payees/{id} – removes a payee only if owned by the authenticated caller.
+     * CWE-639 — returns 404 (not 403) when the payee exists but is not owned by the caller,
+     * to avoid leaking whether the ID is valid for another user.
      *
-     * @param id the UUID of the payee to delete
-     * @return 204 No Content on success, 404 Not Found if the payee does not exist
+     * @param id   the UUID of the payee to delete
+     * @param auth injected by Spring Security; provides the authenticated principal name
+     * @return 204 No Content on success, 404 Not Found if payee does not exist or is not owned
      */
     @DeleteMapping("/{id}")
-    public Mono<ResponseEntity<Void>> deletePayee(@PathVariable String id) {
-        return payeeService.deletePayee(id)
+    public Mono<ResponseEntity<Void>> deletePayee(@PathVariable String id, Authentication auth) {
+        return payeeService.deletePayee(id, auth.getName())
                 .map(removed -> removed
                         ? ResponseEntity.<Void>noContent().build()
                         : ResponseEntity.<Void>notFound().build());

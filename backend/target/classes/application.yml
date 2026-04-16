@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: payee-mfa
+  threads:
+    virtual:
+      enabled: true   # Java Virtual Threads on Tomcat (skill: java-spring-boot-dapr)
+
+dapr:
+  client:
+    http:
+      endpoint: http://localhost:3500
+    grpc:
+      endpoint: localhost:50001  # gRPC preferred over HTTP (skill standard)

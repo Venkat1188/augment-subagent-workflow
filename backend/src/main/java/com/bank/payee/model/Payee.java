@@ -10,6 +10,8 @@ public class Payee {
     private String accountNumber;
     private String bankCode;
     private LocalDateTime addedAt;
+    /** CWE-639 — owner of this payee record; set to the authenticated principal name on creation. */
+    private String ownerId;
 
     public Payee() {}
 
@@ -33,6 +35,9 @@ public class Payee {
 
     public LocalDateTime getAddedAt() { return addedAt; }
     public void setAddedAt(LocalDateTime addedAt) { this.addedAt = addedAt; }
+
+    public String getOwnerId() { return ownerId; }
+    public void setOwnerId(String ownerId) { this.ownerId = ownerId; }
 
     /**
      * S2160 — equals based on {@code id} (unique per persisted payee).
