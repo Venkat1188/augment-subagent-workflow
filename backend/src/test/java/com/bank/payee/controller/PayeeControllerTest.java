@@ -27,6 +27,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -193,6 +195,7 @@ class PayeeControllerTest {
         assertEquals(200, response.getStatusCode().value());
         assertNotNull(response.getBody());
         assertEquals(2, response.getBody().size());
+        verify(payeeService, times(1)).getPayees();
     }
 
     @Test
@@ -226,6 +229,7 @@ class PayeeControllerTest {
         // Assert
         assertEquals(204, response.getStatusCode().value());
         assertNull(response.getBody());
+        verify(payeeService, times(1)).deletePayee("payee-id-1");
     }
 
     @Test
@@ -239,5 +243,6 @@ class PayeeControllerTest {
 
         // Assert
         assertEquals(404, response.getStatusCode().value());
+        verify(payeeService, times(1)).deletePayee("no-such-id");
     }
 }

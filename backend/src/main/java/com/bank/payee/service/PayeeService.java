@@ -3,8 +3,11 @@ package com.bank.payee.service;
 import com.bank.payee.model.Payee;
 import com.bank.payee.model.PayeeAddedEvent;
 import io.dapr.client.DaprClient;
+import io.dapr.client.domain.StateOptions;
+import io.dapr.exceptions.DaprException;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -105,34 +108,53 @@ public class PayeeService {
     // -------------------------------------------------------------------------
 
     /**
-     * Reads the current payee-index, appends {@code payee}, and saves it back.
-     * This is a best-effort read-modify-write; for strict consistency use Dapr
-     * ETag-based concurrency or a transactional state API.
+     * Reads the current payee-index, appends {@code payee}, and saves it back
+     * using <b>ETag-based optimistic concurrency</b> ({@code FIRST_WRITE} wins).
+     *
+     * <p>If a concurrent writer updates the index between our read and write,
+     * Dapr returns an {@code ABORTED} status. We catch that via
+     * {@link DaprException} and retry up to 3 times, re-reading the fresh
+     * state on each attempt — preventing lost updates in a banking context.
      */
     @SuppressWarnings("unchecked")
     private Mono<Void> appendToIndex(Payee payee) {
+        StateOptions opts = new StateOptions(
+                StateOptions.Consistency.STRONG,
+                StateOptions.Concurrency.FIRST_WRITE);
+
         return daprClient.getState(STORE, INDEX_KEY, List.class)
                 .flatMap(state -> {
                     List<Payee> list = state.getValue() != null
                             ? new ArrayList<>((List<Payee>) state.getValue())
                             : new ArrayList<>();
                     list.add(payee);
-                    return daprClient.saveState(STORE, INDEX_KEY, list);
-                });
+                    // Pass the ETag so Dapr rejects the write if another writer
+                    // has already updated this key since we read it.
+                    return daprClient.saveState(STORE, INDEX_KEY, state.getEtag(), list, opts);
+                })
+                .retryWhen(Retry.max(3).filter(e -> e instanceof DaprException));
     }
 
     /**
      * Reads the current payee-index, removes the entry with the given {@code id},
-     * and saves the updated list back.
+     * and saves the updated list back using <b>ETag-based optimistic concurrency</b>.
+     *
+     * <p>Retries up to 3 times on ETag conflict ({@link DaprException}) to ensure
+     * no concurrent add/remove operation is silently overwritten.
      */
     @SuppressWarnings("unchecked")
     private Mono<Void> removeFromIndex(String id) {
+        StateOptions opts = new StateOptions(
+                StateOptions.Consistency.STRONG,
+                StateOptions.Concurrency.FIRST_WRITE);
+
         return daprClient.getState(STORE, INDEX_KEY, List.class)
                 .flatMap(state -> {
                     if (state.getValue() == null) return Mono.empty();
                     List<Payee> list = new ArrayList<>((List<Payee>) state.getValue());
                     list.removeIf(p -> id.equals(p.getId()));
-                    return daprClient.saveState(STORE, INDEX_KEY, list);
-                });
+                    return daprClient.saveState(STORE, INDEX_KEY, state.getEtag(), list, opts);
+                })
+                .retryWhen(Retry.max(3).filter(e -> e instanceof DaprException));
     }
 }

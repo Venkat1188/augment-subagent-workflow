@@ -38,10 +38,13 @@ class PayeeServiceTest {
     void test_addPayee_savesStateAndPublishesEvent() {
         // Arrange
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
-        // saveState called twice: once for payee by ID, once for updated payee-index
+        // 3-arg saveState: used for individual payee by UUID key
         when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any()))
                 .thenReturn(Mono.empty());
-        // getState for payee-index (appendToIndex reads it first)
+        // 5-arg saveState (ETag-aware): used for payee-index write inside appendToIndex
+        when(daprClient.saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any(), any(), any()))
+                .thenReturn(Mono.empty());
+        // getState for payee-index (appendToIndex reads it first before ETag-aware write)
         when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
                 .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
         when(daprClient.publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any()))
@@ -57,8 +60,9 @@ class PayeeServiceTest {
                 })
                 .verifyComplete();
 
-        // Verify both saveState calls and the publish
-        verify(daprClient, times(2)).saveState(eq(PayeeService.STORE), anyString(), any());
+        // Verify: 1 call per payee (3-arg), 1 ETag-aware index write (5-arg), 1 publish
+        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), anyString(), any());
+        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any(), any(), any());
         verify(daprClient, times(1)).publishEvent(eq(PayeeService.PUB_SUB), eq(PayeeService.TOPIC), any());
     }
 
@@ -84,7 +88,11 @@ class PayeeServiceTest {
     void test_addPayee_whenPublishEventFails_propagatesError() {
         // Arrange
         Payee payee = new Payee("Alice", "ACC001", "BNKA");
+        // 3-arg saveState for individual payee by UUID
         when(daprClient.saveState(eq(PayeeService.STORE), anyString(), any()))
+                .thenReturn(Mono.empty());
+        // 5-arg ETag-aware saveState for payee-index (appendToIndex)
+        when(daprClient.saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any(), any(), any()))
                 .thenReturn(Mono.empty());
         when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
                 .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, null, null, null, null)));
@@ -148,10 +156,10 @@ class PayeeServiceTest {
                 .thenReturn(Mono.just(new State<>("abc-123", existing, null, null, null)));
         when(daprClient.deleteState(eq(PayeeService.STORE), eq("abc-123")))
                 .thenReturn(Mono.empty());
-        // removeFromIndex: reads index then saves updated list
+        // removeFromIndex: reads index then saves updated list via ETag-aware 5-arg saveState
         when(daprClient.getState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), eq(List.class)))
                 .thenReturn(Mono.just(new State<>(PayeeService.INDEX_KEY, index, null, null, null)));
-        when(daprClient.saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any()))
+        when(daprClient.saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any(), any(), any()))
                 .thenReturn(Mono.empty());
 
         // Act & Assert
@@ -160,7 +168,7 @@ class PayeeServiceTest {
                 .verifyComplete();
 
         verify(daprClient, times(1)).deleteState(PayeeService.STORE, "abc-123");
-        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any());
+        verify(daprClient, times(1)).saveState(eq(PayeeService.STORE), eq(PayeeService.INDEX_KEY), any(), any(), any());
     }
 
     @Test

@@ -18,8 +18,7 @@
     <description>MFA-protected payee management API</description>
 
     <properties>
-        <!-- JDK 22 is installed locally; upgrade to 26 when JDK 26 is available on CI/CD -->
-        <java.version>22</java.version>
+        <java.version>26</java.version>
     </properties>
 
     <dependencies>
