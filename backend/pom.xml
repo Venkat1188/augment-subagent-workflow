@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.5</version>
+        <version>4.0.5</version>
         <relativePath/>
     </parent>
 
@@ -18,6 +18,7 @@
     <description>MFA-protected payee management API</description>
 
     <properties>
+        <!-- JDK 22 is installed locally; upgrade to 26 when JDK 26 is available on CI/CD -->
         <java.version>22</java.version>
     </properties>
 
@@ -32,7 +33,7 @@
         <dependency>
             <groupId>io.dapr</groupId>
             <artifactId>dapr-sdk-springboot</artifactId>
-            <version>1.12.0</version>
+            <version>1.17.1</version>
         </dependency>
 
         <!-- Reactor Core — Mono/Flux reactive types -->
