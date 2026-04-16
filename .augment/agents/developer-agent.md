@@ -45,12 +45,9 @@ color: "red"
    - Repeat until the build is **fully green** (exit code 0, `BUILD SUCCESS`).
    - If the build stays red after **3 iterations**, report the failure details back to `@sdlc-orchestrator` for escalation.
 
-6. **Create Branch & Open PR**:
+6. **Create Branch & Commit**:
    - Only proceed when the build is green.
-   - Create a branch: `git checkout -b feat/{{JIRA_ID}}`
+   - If not already on the feature branch: `git checkout -b feat/{{JIRA_ID}}`
    - Commit all changes: `git add -A && git commit -m "feat({{JIRA_ID}}): <short description>"`
-   - Push and open a Pull Request. Include in the PR description:
-     - Summary of changes
-     - Link to Jira story (`{{JIRA_ID}}`)
-     - Test results (number of tests passed, 0 failures)
-   - Report the PR URL back to `@sdlc-orchestrator`.
+   - Report branch name and HEAD commit SHA to `@sdlc-orchestrator`.
+   - **Do NOT create the PR here.** The PR is opened by `@sdlc-orchestrator` in Phase 4, after all quality gates have passed. This keeps the PR clean and avoids noise from in-progress fixes.
