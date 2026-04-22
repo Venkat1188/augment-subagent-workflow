@@ -1,0 +1,7 @@
+organization=venkat1188
+projectKey=venkat1188_augment-subagent-workflow
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.85499
+dashboardUrl=https://sonarcloud.io/dashboard?id=venkat1188_augment-subagent-workflow
+ceTaskId=AZ2V7Hm1DJFTlN1OQAe8
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZ2V7Hm1DJFTlN1OQAe8

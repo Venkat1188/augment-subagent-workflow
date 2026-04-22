@@ -1,0 +1,17 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# Maven
+backend/target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+*.env
+.env.*
