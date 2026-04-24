@@ -1,3 +1,5 @@
+https://github.com/augmentcode/code-review-best-practices/tree/main/example-guidelines
+
 teammates register with:
 
   auggie mcp add augment-shared --replace \
